@@ -1,5 +1,7 @@
 package com.rabbitmqtest.alici.config;
 
+import java.util.Map;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.amqp.core.AmqpAdmin;
@@ -16,6 +18,7 @@ import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.ConditionalRejectingErrorHandler;
 import org.springframework.amqp.rabbit.support.ListenerExecutionFailedException;
+import org.springframework.amqp.support.converter.DefaultJackson2JavaTypeMapper;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,7 +27,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.util.ErrorHandler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rabbitmqtest.alici.service.converter.MessageDtoConverterMessageConverter;
+import com.rabbitmqtest.alici.dto.MessageDto;
 
 @EnableRabbit
 @Configuration
@@ -66,15 +69,20 @@ public class RabbitMqConfig {
     }
 
     @Bean
-    public MessageConverter messageDtoConverterMessageConverter() {
-        return new MessageDtoConverterMessageConverter();
+    public DefaultJackson2JavaTypeMapper defaultMapper() {
+        DefaultJackson2JavaTypeMapper defaultJackson2JavaTypeMapper = new DefaultJackson2JavaTypeMapper();
+        defaultJackson2JavaTypeMapper.setIdClassMapping(
+                Map.ofEntries(
+                        Map.entry("com.rabbitmqtest.gonderici.dto.MessageDto", MessageDto.class)));
+        return defaultJackson2JavaTypeMapper;
     }
 
     @Bean
-    public MessageConverter jsonMessageConverter() {
+    public MessageConverter jsonMessageConverter(DefaultJackson2JavaTypeMapper defaultJackson2JavaTypeMapper) {
         ObjectMapper objectMapper = new ObjectMapper();
 
         Jackson2JsonMessageConverter jackson2JsonMessageConverter = new Jackson2JsonMessageConverter(objectMapper);
+        jackson2JsonMessageConverter.setJavaTypeMapper(defaultJackson2JavaTypeMapper);
         return jackson2JsonMessageConverter;
     }
 
@@ -89,10 +97,11 @@ public class RabbitMqConfig {
     }
 
     @Bean
-    public AmqpTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
+    public AmqpTemplate rabbitTemplate(ConnectionFactory connectionFactory,
+            DefaultJackson2JavaTypeMapper defaultJackson2JavaTypeMapper) {
         final RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
         rabbitTemplate.setDefaultReceiveQueue(queueName);
-        rabbitTemplate.setMessageConverter(jsonMessageConverter());
+        rabbitTemplate.setMessageConverter(jsonMessageConverter(defaultJackson2JavaTypeMapper));
         rabbitTemplate.setReplyAddress(queue().getName());
         rabbitTemplate.setReplyTimeout(replyTimeout);
         rabbitTemplate.setUseDirectReplyToContainer(false);
@@ -105,10 +114,11 @@ public class RabbitMqConfig {
     }
 
     @Bean
-    public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory() {
+    public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
+            DefaultJackson2JavaTypeMapper defaultJackson2JavaTypeMapper) {
         final SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory());
-        factory.setMessageConverter(jsonMessageConverter());
+        factory.setMessageConverter(jsonMessageConverter(defaultJackson2JavaTypeMapper));
         factory.setConcurrentConsumers(concurrentConsumers);
         factory.setMaxConcurrentConsumers(maxConcurrentConsumers);
         factory.setErrorHandler(errorHandler());
